@@ -45,7 +45,15 @@ class DeepPrintExtractor:
         out_dir: str,
     ) -> None:
         if not self.training_with_minutia_map:
-            minutia_maps = Dataset(ConstantDataLoader((torch.tensor([]), 0.0)), fingerprints.ids)
+            minutia_maps = Dataset(
+                ConstantDataLoader(
+                    (
+                        torch.tensor([], dtype=torch.float32),
+                        torch.tensor(0.0, dtype=torch.float32),
+                    )
+                ),
+                fingerprints.ids,
+            )
         train_model(
             model=self.model,
             loss=self.loss,

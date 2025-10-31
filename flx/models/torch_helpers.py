@@ -7,40 +7,71 @@ import torch
 CUDA_DEVICE = 0
 TRAIN_ON_A_100 = True
 
+# MPS (Apple Silicon) limitations:
+# - MPS may not support all operations with float64 (double precision)
+# - Some operations may fall back to CPU automatically
+# - num_workers should be 0 for DataLoader on MPS
+MPS_FALLBACK_TO_CPU_ON_ERROR = True
+
 
 def get_dataloader_args(train: bool) -> dict:
     batch_size = 16
     if not train:
         batch_size *= 2  # More memory available without gradients
-    if not torch.cuda.is_available():
+
+    if torch.cuda.is_available():
+        if TRAIN_ON_A_100:  # Use 40GB graphics ram by preloading to pinned memory
+            return {
+                "batch_size": batch_size,
+                "shuffle": train,
+                "num_workers": 16,
+                "prefetch_factor": 2,
+                "pin_memory": True,
+                "pin_memory_device": f"cuda:{CUDA_DEVICE}",
+            }
+        return {
+            "batch_size": batch_size,
+            "shuffle": train,
+            "num_workers": 4,
+            "prefetch_factor": 1,
+            "pin_memory": True,
+            "pin_memory_device": f"cuda:{CUDA_DEVICE}",
+        }
+    elif torch.backends.mps.is_available():
+        # MPS (Apple Silicon) configuration
+        return {
+            "batch_size": batch_size,
+            "shuffle": train,
+            "num_workers": 0,  # MPS works best with num_workers=0
+            "prefetch_factor": None,  # Not applicable when num_workers=0
+        }
+    else:
+        # CPU configuration
         return {
             "batch_size": batch_size,
             "shuffle": train,
             "num_workers": 4,
             "prefetch_factor": 1,
         }
-    if TRAIN_ON_A_100:  # Use 40GB graphics ram by preloading to pinned memory
-        return {
-            "batch_size": batch_size,
-            "shuffle": train,
-            "num_workers": 16,
-            "prefetch_factor": 2,
-            "pin_memory": True,
-            "pin_memory_device": f"cuda:{CUDA_DEVICE}",
-        }
-    return {
-        "batch_size": batch_size,
-        "shuffle": train,
-        "num_workers": 4,
-        "prefetch_factor": 1,
-        "pin_memory": True,
-        "pin_memory_device": f"cuda:{CUDA_DEVICE}",
-    }
 
 
 def get_device() -> str:
     if torch.cuda.is_available():
         return torch.device(f"cuda:{CUDA_DEVICE}")
+    elif torch.backends.mps.is_available():
+        # Test if MPS can handle basic operations
+        try:
+            # Test basic tensor operations on MPS
+            test_tensor = torch.randn(2, 2, device="mps")
+            _ = test_tensor * 2.0
+            return torch.device("mps")
+        except Exception as e:
+            print(f"Warning: MPS available but failed basic test: {e}")
+            if MPS_FALLBACK_TO_CPU_ON_ERROR:
+                print("Falling back to CPU")
+                return torch.device("cpu")
+            else:
+                return torch.device("mps")  # Let user handle MPS issues
     return torch.device("cpu")
 
 

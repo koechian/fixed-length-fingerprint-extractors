@@ -62,9 +62,10 @@ class FVC2004Loader(ImageLoader):
         return ".tif"
 
     @staticmethod
-    def _file_to_id_fun(filename: str) -> Identifier:
-        # Pattern: <dir>/<subject_id>_<sample_id>.png
-        subject_id, impression_id = filename.split("_")
+    def _file_to_id_fun(subdir: str, filename: str) -> Identifier:
+        # Pattern: <dir>/<subject_id>_<sample_id>.tif
+        filename_without_ext = filename.replace(".tif", "")
+        subject_id, impression_id = filename_without_ext.split("_")
         # We must start indexing at 0 instead of 1 to be compatible with pytorch
         return Identifier(int(subject_id) - 1, int(impression_id) - 1)
 
