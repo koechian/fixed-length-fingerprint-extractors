@@ -5,7 +5,7 @@ import torch
 
 
 CUDA_DEVICE = 0
-TRAIN_ON_A_100 = True
+TRAIN_ON_A_100 = False  # Set to False for RTX 2080 (8GB) - True only for A100 (40GB)
 
 # MPS (Apple Silicon) limitations:
 # - MPS may not support all operations with float64 (double precision)
@@ -15,7 +15,7 @@ MPS_FALLBACK_TO_CPU_ON_ERROR = True
 
 
 def get_dataloader_args(train: bool) -> dict:
-    batch_size = 16
+    batch_size = 8  # Reduced from 16 for RTX 2080 (8GB)
     if not train:
         batch_size *= 2  # More memory available without gradients
 
@@ -32,10 +32,11 @@ def get_dataloader_args(train: bool) -> dict:
         return {
             "batch_size": batch_size,
             "shuffle": train,
-            "num_workers": 4,
-            "prefetch_factor": 1,
+            "num_workers": 6,
+            "prefetch_factor": 3,
             "pin_memory": True,
             "pin_memory_device": f"cuda:{CUDA_DEVICE}",
+            "persistent_workers": True,
         }
     elif torch.backends.mps.is_available():
         # MPS (Apple Silicon) configuration

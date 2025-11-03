@@ -5,6 +5,7 @@ import torch
 import torchvision.transforms.functional as VTF
 import cv2
 
+from flx.setup.config import INPUT_SIZE
 from flx.data.image_helpers import (
     pad_and_resize_to_deepprint_input_size,
 )
@@ -134,3 +135,102 @@ class NistSD4Dataset(ImageLoader):
     def _load_image(filepath: str) -> torch.Tensor:
         img = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
         return pad_and_resize_to_deepprint_input_size(img, fill=1.0)
+
+
+class SOCOFingLoader(ImageLoader):
+    """
+    Loader for SOCOFing dataset
+    Filename pattern: <subject_id>__<gender>_<hand>_<finger_name>.BMP
+    Example: 1__M_Right_little_finger.BMP
+
+    Each subject has 10 fingerprints (5 fingers × 2 hands).
+    We treat each finger as a separate "impression" for that subject.
+    """
+
+    @staticmethod
+    def _extension() -> str:
+        return ".BMP"
+
+    @staticmethod
+    def _file_to_id_fun(_: str, filename: str) -> Identifier:
+        parts = filename.replace(".BMP", "").split("__")
+        person_id = int(parts[0])
+
+        # Parse hand and finger info
+        # Format: <gender>_<hand>_<finger_name>
+        finger_info = parts[1]
+
+        # Each finger is a SEPARATE SUBJECT
+        # Create unique subject ID: person_id * 10 + finger_index
+        # Left hand: 0-4, Right hand: 5-9
+        if "Left" in finger_info:
+            hand_offset = 0
+        else:  # Right
+            hand_offset = 5
+
+        if "thumb" in finger_info:
+            finger_idx = 0
+        elif "index" in finger_info:
+            finger_idx = 1
+        elif "middle" in finger_info:
+            finger_idx = 2
+        elif "ring" in finger_info:
+            finger_idx = 3
+        elif "little" in finger_info:
+            finger_idx = 4
+        else:
+            finger_idx = 0
+
+        # Subject = unique finger (person_id * 10 + finger_index)
+        # Person 1-600, each with 10 fingers (indices 0-9)
+        subject_id = (person_id - 1) * 10 + hand_offset + finger_idx
+
+        impression_id = 0
+
+        return Identifier(subject=subject_id, impression=impression_id)
+
+    @staticmethod
+    def _load_image(filepath: str) -> torch.Tensor:
+        img = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+        # Convert to tensor first, then resize
+        img_tensor = VTF.to_tensor(img)
+        # Resize directly to target size
+        return VTF.resize(img_tensor, (INPUT_SIZE, INPUT_SIZE), antialias=True)
+
+
+class CrossmatchLoader(ImageLoader):
+    """
+    Loader for Crossmatch dataset with multiple impressions per finger.
+    Filename pattern: xxx_yyy_zzz.tif
+    where xxx = person ID, yyy = finger ID, zzz = scan number
+    Example: 012_1_1.tif
+
+    This dataset has multiple scans of the same finger,
+    making it ideal for verification training.
+    """
+
+    @staticmethod
+    def _extension() -> str:
+        return ".tif"
+
+    @staticmethod
+    def _file_to_id_fun(_: str, filename: str) -> Identifier:
+        filename_without_ext = filename.replace(".tif", "")
+        parts = filename_without_ext.split("_")
+        person_id = int(parts[0])
+        finger_id = int(parts[1])
+        scan_number = int(parts[2])
+
+        # Create unique subject ID: person_id * 10 + finger_id
+        # This treats each finger as a separate subject for training
+        subject_id = person_id * 10 + finger_id
+
+        # scan_number becomes the impression_id
+        # We must start indexing at 0 instead of 1 to be compatible with pytorch
+        return Identifier(subject=subject_id - 1, impression=scan_number - 1)
+
+    @staticmethod
+    def _load_image(filepath: str) -> torch.Tensor:
+        img = cv2.imread(filepath, cv2.IMREAD_GRAYSCALE)
+        img_tensor = VTF.to_tensor(img)
+        return VTF.resize(img_tensor, (INPUT_SIZE, INPUT_SIZE), antialias=True)
