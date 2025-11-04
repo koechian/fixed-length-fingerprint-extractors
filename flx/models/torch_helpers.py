@@ -60,9 +60,7 @@ def get_device() -> str:
     if torch.cuda.is_available():
         return torch.device(f"cuda:{CUDA_DEVICE}")
     elif torch.backends.mps.is_available():
-        # Test if MPS can handle basic operations
         try:
-            # Test basic tensor operations on MPS
             test_tensor = torch.randn(2, 2, device="mps")
             _ = test_tensor * 2.0
             return torch.device("mps")
@@ -72,7 +70,7 @@ def get_device() -> str:
                 print("Falling back to CPU")
                 return torch.device("cpu")
             else:
-                return torch.device("mps")  # Let user handle MPS issues
+                return torch.device("mps")
     return torch.device("cpu")
 
 

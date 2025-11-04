@@ -106,3 +106,5 @@ biometrics_venv
 # Datasets
 notebooks/dataset/*
 notebooks/trained_models/*
+
+/trained_models/*
